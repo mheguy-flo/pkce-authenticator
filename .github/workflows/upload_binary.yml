@@ -1,0 +1,58 @@
+name: Publish executables
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # actions/upload-release-asset needs this.
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-2019
+            pathsep: ";"
+            asset_name: pkce_authenticator_windows.exe
+            executable_mime: "application/vnd.microsoft.portable-executable"
+          - os: ubuntu-latest
+            pathsep: ":"
+            asset_name: pkce_authenticator_linux
+            executable_mime: "application/x-executable"
+          - os: macos-latest
+            pathsep: ":"
+            asset_name: pkce_authenticator_macos
+            executable_mime: "application/x-mach-binary"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'poetry'
+      - run: poetry install --no-root --without dev
+
+      - name: Build executable with PyInstaller
+        run: >
+          poetry run pyinstaller
+          --onefile
+          --name ${{ matrix.asset_name }}
+          pkce_authenticator/main.py
+
+      - name: Upload binary as release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: dist/${{ matrix.asset_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: ${{ matrix.executable_mime }}
